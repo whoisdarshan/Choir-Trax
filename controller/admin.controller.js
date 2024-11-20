@@ -608,40 +608,126 @@ adminController.songList = async (req, res) => {
     return deferred.promise;
 };
 
+// adminController.addSong = async (req, res) => {
+//     const deferred = Q.defer();
+//     const { songName, artist_id, type, category,playList_id} = req.body;
+//     try {
+//         let artistResponse = await artistMaster.findById({ _id: artist_id });
+//         if (!artistResponse) {
+//             deferred.reject("We are not able to find this artist");
+//             return deferred.promise
+//         }
+
+//         const playlistIdsArray = Array.isArray(playList_id) ? playList_id : [playList_id];
+
+//         // Check if all playlist IDs exist in the playListMaster collection
+//         const playlists = await playListMaster.find({ 
+//             _id: { $in: playlistIdsArray }, 
+//             deleted_at: null 
+//         }).select('_id');
+
+//         const validPlaylistIds = playlists.map(playlist => playlist._id.toString());
+//         console.log('😀',validPlaylistIds);
+//         const invalidPlaylistIds = playlistIdsArray.filter(id => !validPlaylistIds.includes(id));  //  ! i put this because it give true  if only validplaylistids.include then they give me false but i need true answeer that's why i use ! operator
+//         console.log('😀',invalidPlaylistIds);
+//         if(invalidPlaylistIds.length>0 ){
+//             deferred.reject(`The following playlist IDs are invalid: ${invalidPlaylistIds.join(", ")}`);
+//         }
+
+//         let existSong = await songMaster.findOne({ songName: songName });
+//         if (existSong) {
+//             deferred.reject("song_already_exist");
+//             return deferred.promise;
+//         }
+
+//         songFile = req.file.filename;
+//         let createSong = await songMaster.create({
+//             songName,
+//             songFile: songFile,
+//             playList_id:validPlaylistIds,
+//             category,
+//             artist_id: artist_id,
+//             type
+//         });
+
+//         const baseURL = req.protocol + '://' + req.get('host') + '/public/profile/';
+//         createSong.songFile = baseURL + songFile;
+//         deferred.resolve(createSong);
+
+//     } catch (error) {
+//         console.log('adminController.addSong-', error)
+//         deferred.reject(error);
+//     }
+//     return deferred.promise;
+// }
+
 adminController.addSong = async (req, res) => {
-    const deferred = Q.defer();
-    const { songName, artist_id, type, category } = req.body;
+    const deferred = Q.defer(); // Using Q for promise handling
+    const { songName, artist_id, type, category, playList_id } = req.body;
+
     try {
-        let artistResponse = await artistMaster.findById({ _id: artist_id });
+        // Check if the artist exists
+        const artistResponse = await artistMaster.findById(artist_id);
         if (!artistResponse) {
             deferred.reject("We are not able to find this artist");
-            return deferred.promise
-        }
-        let existSong = await songMaster.findOne({ songName: songName });
-        if (existSong) {
-            deferred.reject("song_already_exist");
-            return deferred.promise;
+            return deferred.promise; // Exit if artist not found
         }
 
-        songFile = req.file.filename;
-        let createSong = await songMaster.create({
+        // Ensure playList_id is always an array
+        const playlistIdsArray = Array.isArray(playList_id) ? playList_id : [playList_id];
+        
+        // Check if all playlist IDs exist in the playListMaster collection
+        const playlists = await playListMaster.find({ 
+            _id: { $in: playlistIdsArray }, 
+            deleted_at: null 
+        }).select('_id');
+
+        // Collect valid IDs
+        const validPlaylistIds = playlists.map(playlist => playlist._id.toString());
+
+        // Check for invalid IDs
+        const invalidPlaylistIds = playlistIdsArray.filter(id => !validPlaylistIds.includes(id));
+        if (invalidPlaylistIds.length > 0) {
+            deferred.reject(`The following playlist IDs are invalid: ${invalidPlaylistIds.join(", ")}`);
+            return deferred.promise; // Exit if invalid IDs found
+        }
+
+        // Check if the song already exists
+        const existSong = await songMaster.findOne({ songName: songName });
+        if (existSong) {
+            deferred.reject("song_already_exist");
+            return deferred.promise; // Exit if song exists
+        }
+
+        // Handle the song file
+        if (!req.file || !req.file.filename) {
+            deferred.reject("Song file is required");
+            return deferred.promise; // Exit if the file is not provided
+        }
+
+        const songFile = req.file.filename; // Assuming you are uploading the file correctly
+
+        // Create the song in the database
+        const createSong = await songMaster.create({
             songName,
             songFile: songFile,
+            playList_id: validPlaylistIds, // Use validated playlist IDs
             category,
             artist_id: artist_id,
             type
         });
 
+        // Construct the file URL
         const baseURL = req.protocol + '://' + req.get('host') + '/public/profile/';
-        createSong.songFile = baseURL + songFile;
-        deferred.resolve(createSong);
+        createSong.songFile = baseURL + songFile; // Update songFile with the full URL
+        deferred.resolve(createSong); // Resolve promise with the created song
 
     } catch (error) {
-        console.log('adminController.addSong-', error)
-        deferred.reject(error);
+        deferred.reject(error); // Handle errors
     }
-    return deferred.promise;
+    return deferred.promise; // Return the promise
 }
+
 
 adminController.deleteSong = async (req, res) => {
     const deferred = Q.defer();
@@ -733,6 +819,6 @@ function makeid(length) {
         result += characters.charAt(Math.floor(Math.random() * characterLength))
     }
     return result;
-}
+}   
 
 module.exports = adminController;

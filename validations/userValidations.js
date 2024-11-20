@@ -50,42 +50,81 @@ module.exports = {
             song_id:Joi.objectId().required()
         })
     },
-    recentlyPlaylistSongsSchema: {
-        body: Joi.object().keys({
-            playList_id: Joi.objectId().required(),
-            song_id: Joi.objectId().optional(),
-        })
-    },
-    recentlySchema: {
-        body: Joi.object().keys({
-            search: stringSchema.optional()
-        })
-    },
-    popularSchema: {
-        body: Joi.object().keys({
-            search: stringSchema.optional()
-        })
-    },
-    popularPlaylistSongsSchema:{
+    getHomeSongsSchema:{
         body:Joi.object().keys({
-            song_id:Joi.objectId().optional(),
-            popularList_id:Joi.objectId().required(),
+            user_id:Joi.objectId().optional(),
+            playList_id:Joi.objectId().required(),
+            song_id:Joi.objectId().optional()
         })
     },
-    searchByArtistSongsSchema:{
+    getRecentlySongsSchema:{
+        body:Joi.object().keys({
+            playList_id:Joi.objectId().required(),
+            user_id:Joi.objectId().optional(),
+            song_id:Joi.objectId().optional()
+        })
+    },
+    getPopularSongsSchema:{
+        body:Joi.object().keys({
+            playList_id:Joi.objectId().required(),
+            user_id:Joi.objectId().optional(),
+            song_id:Joi.objectId().optional()
+        })
+    },
+    getByArtistSongsSchema:{
         body:Joi.object().keys({
             song_id:Joi.objectId().optional(),
             artist_id:Joi.objectId().optional(),
+            user_id:Joi.objectId().optional()
         })
     },
     gospelSongsSchema:{
         body:Joi.object().keys({
         })
     },
+    getAllGospelSongsSchema:{
+        body:Joi.object().keys({
+            song_id:Joi.objectId().optional(),
+            user_id:Joi.objectId().optional()
+        })
+    },
+    getGospelSongsSchema:{
+        body:Joi.object().keys({
+            playList_id:Joi.objectId().required(),
+            song_id:Joi.objectId().optional(),
+            user_id:Joi.objectId().optional()
+        })
+    },
     contemporarySongsSchema:{
         body:Joi.object().keys({
             type:stringSchema.optional(),
             side:stringSchema.optional()
+        })
+    },
+    getContemporarySongsSchema:{
+        body:Joi.object().keys({
+            playList_id:Joi.objectId().required(),
+            user_id:Joi.objectId().optional(),
+            song_id:Joi.objectId().optional()
+        })
+    },
+    getAllContemporaryChristianSongsSchema:{
+        body:Joi.object().keys({
+            song_id:Joi.objectId().optional(),
+            user_id:Joi.objectId().optional()
+        })
+    },
+    getHymnsSongsSchema:{
+        body:Joi.object().keys({
+            playList_id:Joi.objectId().required(),
+            user_id:Joi.objectId().optional(),
+            song_id:Joi.objectId().optional()
+        })
+    },
+    getAllHymnsSongsSchema:{
+        body:Joi.object().keys({
+            song_id:Joi.objectId().optional(),
+            user_id:Joi.objectId().optional()
         })
     },
     updateProfileSchema:{

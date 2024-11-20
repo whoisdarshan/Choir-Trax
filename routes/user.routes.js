@@ -9,7 +9,6 @@ const fs = require('fs');
 const { userVerifyToken } = require('../helper/verifyToken');
 const userValidations = require('../validations/userValidations');
 const multer = require('multer');
-const { error } = require('console');
 
 const multerStorage = multer.diskStorage({
     destination: function (req, file, cb) {
@@ -140,12 +139,75 @@ Router.post('/home',
                 } else if (req.query.side == 'popular') {
                     var finalRes = formatter.formatResponse(resultObj, 1, config.messages['show_popular_songs_success'], true);
                     res.send(finalRes)
-                }else{
+                } else {
                     var finalRes = formatter.formatResponse(resultObj, 1, config.messages['home_page'], true);
                     res.send(finalRes)
                 }
             }, function (errorCode) {
                 var finalRes = formatter.formatResponse({}, 0, errorCode, false)
+                res.send(finalRes);
+            })
+    }
+)
+
+Router.post('/getHomeSongs',
+    upload.none(),
+    routesMiddlewares.validateRequest(userValidations.getHomeSongsSchema),
+    function (req, res) {
+        userCtrl.getHomeSongs(req, res)
+            .then((resultObj) => {
+                if (req.query.addToCart == 'true') {
+                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['add_cart_success.'], true);
+                    res.send(finalRes);
+                } else {
+                    console.log('😀', resultObj)
+                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['getHome_songs_success'], true);
+                    res.send(finalRes);
+                }
+            }, function (errorCode) {
+                var finalRes = formatter.formatResponse({}, 0, errorCode, false);
+                res.send(finalRes);
+            })
+    }
+)
+
+Router.post('/getRecentlySongs',
+    upload.none(),
+    routesMiddlewares.validateRequest(userValidations.getRecentlySongs),
+    function (req, res) {
+        userCtrl.getRecentlySongs(req, res)
+            .then((resultObj) => {
+                if (req.query.addToCart == 'true') {
+                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['add_cart_success.'], true);
+                    res.send(finalRes);
+                } else {
+                    console.log('😀', resultObj)
+                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['getRecently_songs_success'], true);
+                    res.send(finalRes);
+                }
+            }, function (errorCode) {
+                var finalRes = formatter.formatResponse({}, 0, errorCode, false);
+                res.send(finalRes);
+            })
+    }
+)
+
+Router.post('/getPopularSongs',
+    upload.none(),
+    routesMiddlewares.validateRequest(userValidations.getPopularSongsSchema),
+    function (req, res) {
+        userCtrl.getPopularSongs(req, res)
+            .then((resultObj) => {
+                if (req.query.addToCart == 'true') {
+                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['add_cart_success.'], true);
+                    res.send(finalRes);
+                } else {
+                    // console.log('😀',resultObj)
+                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['getPopular_songs_success'], true);
+                    res.send(finalRes);
+                }
+            }, function (errorCode) {
+                var finalRes = formatter.formatResponse({}, 0, errorCode, false);
                 res.send(finalRes);
             })
     }
@@ -167,52 +229,6 @@ Router.post('/addFavourite',
     }
 )
 
-Router.post('/recentlyPlaylistSongs',
-    upload.none(),
-    userVerifyToken,
-    routesMiddlewares.validateRequest(userValidations.recentlyPlaylistSongsSchema),
-    function (req, res) {
-        userCtrl.recentlyPlaylistSongs(req, res)
-            .then((resultObj) => {
-                const { type } = req.query;
-                if (req.query.myCart == 'true') {
-                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['add_cart_success.'], true);
-                    res.send(finalRes)
-                } else {
-                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['show_all_songs_success'], true);
-                    res.send(finalRes)
-                }
-
-            }, function (errorCode) {
-                var finalRes = formatter.formatResponse({}, 0, errorCode, false)
-                res.send(finalRes);
-            })
-    }
-)
-
-Router.post('/popularPlaylistSongs',
-    upload.none(),
-    routesMiddlewares.validateRequest(userValidations.popularPlaylistSongsSchema),
-    userVerifyToken,
-    function (req, res) {
-        userCtrl.popularPlaylistSongs(req, res)
-            .then((resultObj) => {
-                const { type } = req.query;
-                if (req.query.myCart == 'true') {
-                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['add_cart_success.'], true);
-                    res.send(finalRes)
-                } else {
-                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['show_all_songs_success'], true);
-                    res.send(finalRes)
-                }
-
-            }, function (errorCode) {
-                var finalRes = formatter.formatResponse({}, 0, errorCode, false)
-                res.send(finalRes);
-            })
-    }
-)
-
 Router.post('/searchByArtist',
     upload.none(),
     function (req, res) {
@@ -227,18 +243,17 @@ Router.post('/searchByArtist',
     }
 )
 
-Router.post('/searchByArtistSongs',
+Router.post('/getByArtistSongs',
     upload.none(),
-    userVerifyToken,
-    routesMiddlewares.validateRequest(userValidations.searchByArtistSongsSchema),
+    routesMiddlewares.validateRequest(userValidations.getByArtistSongsSchema),
     function (req, res) {
-        userCtrl.searchByArtistSongs(req, res)
+        userCtrl.getByArtistSongs(req, res)
             .then((resultObj) => {
                 if (req.query.myCart == 'true') {
                     var finalRes = formatter.formatResponse(resultObj, 1, config.messages['add_cart_success.'], true);
                     res.send(finalRes)
                 } else {
-                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['show_all_songs_success'], true);
+                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['getByArtist_songs_success'], true);
                     res.send(finalRes)
                 }
             }, function (errorCode) {
@@ -250,22 +265,20 @@ Router.post('/searchByArtistSongs',
 
 Router.post('/gospelSongs',
     upload.none(),
-    userVerifyToken,
     function (req, res) {
         userCtrl.gospelSongs(req, res)
             .then((resultObj) => {
                 const { type } = req.query
-                if (req.query.myCart == 'true') {
-                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['add_cart_success.'], true);
-                    res.send(finalRes)
-                } else if (type == 'true') {
-                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['show_all_songs_success'], true);
-                    res.send(finalRes);
-                }
-                else {
-                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['gospel_page'], true);
-                    res.send(finalRes)
-                }
+                // if (type == 'true') {
+                //     var finalRes = formatter.formatResponse(resultObj, 1, config.messages[''], true);
+                //     res.send(finalRes);
+                // }
+                // else {
+                //     var finalRes = formatter.formatResponse(resultObj, 1, config.messages['gospel_page'], true);
+                //     res.send(finalRes)
+                // }
+                var finalRes = formatter.formatResponse(resultObj, 1, config.messages['gospel_page'], true);
+                res.send(finalRes)
             }, function (errorCode) {
                 var finalRes = formatter.formatResponse({}, 0, errorCode, false)
                 res.send(finalRes);
@@ -273,30 +286,87 @@ Router.post('/gospelSongs',
     }
 )
 
-Router.post('/contemporarySongs',
+Router.post('/getAllGospelSongs',
     upload.none(),
-    userVerifyToken,
-    // routesMiddlewares.validateRequest(userValidations.contemporarySongsSchema),
+    routesMiddlewares.validateRequest(userValidations.getAllGospelSongsSchema),
     function (req, res) {
-        userCtrl.contemporarySongs(req, res)
+        userCtrl.getAllGospelSongs(req, res)
             .then((resultObj) => {
-                const { type } = req.query
-                if (req.query.myCart == 'true') {
+                if (req.query.addToCart == 'true') {
                     var finalRes = formatter.formatResponse(resultObj, 1, config.messages['add_cart_success.'], true);
-                    res.send(finalRes)
-                } else if (type == 'true') {
-                    console.log('👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍', resultObj);
-                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['show_all_songs_success'], true);
-                    console.log('👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍', finalRes);
-
                     res.send(finalRes);
                 } else {
-                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['contemporary_page'], true);
-                    console.log('👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍', finalRes);
+                    console.log('😀', resultObj)
+                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['getAllGospels_songs_success'], true);
                     res.send(finalRes);
                 }
             }, function (errorCode) {
+                var finalRes = formatter.formatResponse({}, 0, errorCode, false);
+                res.send(finalRes);
+            })
+    }
+)
+
+Router.post('/getGospelSongs',
+    upload.none(),
+    routesMiddlewares.validateRequest(userValidations.getGospelSongsSchema),
+    function (req, res) {
+        userCtrl.getGospelSongs(req, res)
+            .then((resultObj) => {
+                if (req.query.addToCart == 'true') {
+                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['add_cart_success.'], true);
+                    res.send(finalRes);
+                } else {
+                    console.log('😀', resultObj)
+                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['getGospel_songs_success'], true);
+                    res.send(finalRes);
+                }
+            }, function (errorCode) {
+                var finalRes = formatter.formatResponse({}, 0, errorCode, false);
+                res.send(finalRes);
+            })
+    }
+)
+
+Router.post('/contemporarySongs',
+    upload.none(),
+    function (req, res) {
+        userCtrl.contemporarySongs(req, res)
+            .then((resultObj) => {
+                // const { type } = req.query
+                // if (type == 'true') {
+                //     var finalRes = formatter.formatResponse(resultObj, 1, config.messages['show_all_songs_success'], true);
+                //     res.send(finalRes);
+                // }
+                // else {
+                //     var finalRes = formatter.formatResponse(resultObj, 1, config.messages['Contemporary_songs'], true);
+                //     res.send(finalRes)
+                // }
+                var finalRes = formatter.formatResponse(resultObj, 1, config.messages['Contemporary_page'], true);
+                res.send(finalRes)
+            }, function (errorCode) {
                 var finalRes = formatter.formatResponse({}, 0, errorCode, false)
+                res.send(finalRes);
+            })
+    }
+)
+
+Router.post('/getContemporarySongs',
+    upload.none(),
+    routesMiddlewares.validateRequest(userValidations.getContemporarySongsSchema),
+    function (req, res) {
+        userCtrl.getContemporarySongs(req, res)
+            .then((resultObj) => {
+                if (req.query.addToCart == 'true') {
+                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['add_cart_success.'], true);
+                    res.send(finalRes);
+                } else {
+                    console.log('😀', resultObj)
+                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['getContemporary_songs_success'], true);
+                    res.send(finalRes);
+                }
+            }, function (errorCode) {
+                var finalRes = formatter.formatResponse({}, 0, errorCode, false);
                 res.send(finalRes);
             })
     }
@@ -323,6 +393,129 @@ Router.post('/updateProfile',
     }
 )
 
+Router.post('/getAllContemporaryChristianSongs',
+    upload.none(),
+    routesMiddlewares.validateRequest(userValidations.getAllContemporaryChristianSongsSchema),
+    function (req, res) {
+        userCtrl.getAllContemporaryChristianSongs(req, res)
+            .then((resultObj) => {
+                if (req.query.addToCart == 'true') {
+                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['add_cart_success.'], true);
+                    res.send(finalRes);
+                } else {
+                    console.log('😀', resultObj)
+                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['getAllContemporary_songs_success'], true);
+                    res.send(finalRes);
+                }
+            }, function (errorCode) {
+                var finalRes = formatter.formatResponse({}, 0, errorCode, false);
+                res.send(finalRes);
+            })
+    }
+)
+
+Router.post('/hymnsSongs',
+    upload.none(),
+    function (req, res) {
+        userCtrl.hymnsSongs(req, res)
+            .then((resultObj) => {
+                // const { type } = req.query
+                // if (type == 'true') {
+                //     var finalRes = formatter.formatResponse(resultObj, 1, config.messages['show_all_songs_success'], true);
+                //     res.send(finalRes);
+                // }
+                // else {
+                //     var finalRes = formatter.formatResponse(resultObj, 1, config.messages['Contemporary_songs'], true);
+                //     res.send(finalRes)
+                // }
+                var finalRes = formatter.formatResponse(resultObj, 1, config.messages['hymns_page'], true);
+                res.send(finalRes)
+            }, function (errorCode) {
+                var finalRes = formatter.formatResponse({}, 0, errorCode, false)
+                res.send(finalRes);
+            })
+    }
+)
+
+Router.post('/getHymnsSongs',
+    upload.none(),
+    routesMiddlewares.validateRequest(userValidations.getHymnsSongsSchema),
+    function (req, res) {
+        userCtrl.getHymnsSongs(req, res)
+            .then((resultObj) => {
+                if (req.query.addToCart == 'true') {
+                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['add_cart_success.'], true);
+                    res.send(finalRes);
+                } else {
+                    console.log('😀', resultObj)
+                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['getGospel_songs_success'], true);
+                    res.send(finalRes);
+                }
+            }, function (errorCode) {
+                var finalRes = formatter.formatResponse({}, 0, errorCode, false);
+                res.send(finalRes);
+            })
+    }
+)
+
+Router.post('/getAllHymnsSongs',
+    upload.none(),
+    routesMiddlewares.validateRequest(userValidations.getAllHymnsSongsSchema),
+    function (req, res) {
+        userCtrl.getAllHymnsSongs(req, res)
+            .then((resultObj) => {
+                if (req.query.addToCart == 'true') {
+                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['add_cart_success.'], true);
+                    res.send(finalRes);
+                } else {
+                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['getAllHymns_songs_success'], true);
+                    res.send(finalRes);
+                }
+            }, function (errorCode) {
+                var finalRes = formatter.formatResponse({}, 0, errorCode, false);
+                res.send(finalRes);
+            })
+    }
+)
+
+Router.post('/updateProfile',
+    upload.none(),
+    userVerifyToken,
+    routesMiddlewares.validateRequest(userValidations.updateProfileSchema),
+    function (req, res) {
+        userCtrl.updateProfile(req, res)
+            .then((resultObj) => {
+                if (req.query.favourite == 'true') {
+                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['show_favourite'], true)
+                    res.send(finalRes);
+                } else if (req.query.password == 'true') {
+                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['password_change_success'], true)
+                    res.send(finalRes);
+                } else {
+                    var finalRes = formatter.formatResponse(resultObj, 1, config.messages['profile_update'], true)
+                    res.send(finalRes);
+                }
+            }, function (errorCode) {
+                var finalRes = formatter.formatResponse({}, 0, errorCode, false);
+                res.send(finalRes);
+            })
+    }
+)
+
+Router.post('/myCart',
+    upload.none(),
+    userVerifyToken,
+    function (req, res) {
+        userCtrl.myCart(req, res)
+            .then((resultObj) => {
+                var finalRes = formatter.formatResponse(resultObj, 1, config.messages['show_cart_success'], true)
+                res.send(finalRes);
+            }, function (errorCode) {
+                var finalRes = formatter.formatResponse({}, 0, errorCode, false);
+                res.send(finalRes);
+            })
+    }
+)
 
 
 

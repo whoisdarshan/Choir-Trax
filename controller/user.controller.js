@@ -13,10 +13,7 @@ const cartMaster = require('../model/cart_master');
 const playListMaster = require('../model/playlist_master');
 const artistMaster = require('../model/artist_master');
 const songMaster = require('../model/song_master');
-const { Console } = require('console');
 const path = require('path');
-const { exist } = require('joi');
-const { song_already_exist } = require('../config/message');
 let publicPath = basedir + '/public/';
 const baseURL = 'http://localhost:3456/public/';
 
@@ -198,8 +195,9 @@ userController.recently = async (req, res) => {
             {
                 $match: {
                     deleted_at: null,
-                    createdAt: { $gte: new Date(Date.now() - 29 * 24 * 60 * 60 * 1000) },
-                    ...(search && { songName: { $regex: new RegExp(search, 'i') } })
+                    createdAt: { $gte: new Date(Date.now() - 129 * 24 * 60 * 60 * 1000) },
+                    ...(search && { songName: { $regex: new RegExp(search, 'i') } }),
+                    ...({ category: req.query.category }) // optionally
                 }
             },
             // Unwind the playlist_id array so each playlist_id is treated as separate
@@ -225,9 +223,13 @@ userController.recently = async (req, res) => {
         const songs = recentlySongs.map(song => ({
             _id: song._id,
             songName: song.songName,
-            playListName: song.playlistDetails.playListName,
-            playlist_img: baseURL + 'profile/' + song.playlistDetails.playlist_img // Assuming the image path is stored in playlist_img
+            playlist: {
+                _id: song.playlistDetails._id,
+                playListName: song.playlistDetails.playListName,
+                playlist_img: baseURL + 'profile/' + song.playlistDetails.playlist_img
+            }
         }));
+
 
         deferred.resolve(songs);
 
@@ -253,144 +255,70 @@ userController.recently = async (req, res) => {
     return deferred.promise;
 };
 
-// userController.popular = async (req, res) => {
-//     const deferred = Q.defer();
-//     try {
-//         const search = req.query.search || '';
-
-//         const popularPlaylists = await playListMaster.aggregate([
-//             {
-//                 $lookup: {
-//                     from: 'song_masters',
-//                     localField: '_id',
-//                     foreignField: 'playList_id',
-//                     as: 'songs'
-//                 }
-//             },
-//             {
-//                 $unwind: '$songs'
-//             },
-//             {
-//                 $match: {
-//                     deleted_at: null,
-//                     ...(search && { playListName: { $regex: search, $options: 'i' } })
-//                 }
-//             },
-//             {
-//                 $project: {
-//                     _id: 1,
-//                     playListName: 1,
-//                     playlist_img: { $concat: [baseURL, 'profile/', '$playlist_img'] },
-//                     totalPlayCount: { $sum: '$songs.playCount' }
-//                 }
-//             },
-//             {
-//                 $match: {
-//                     totalPlayCount: { $gt: 0 }
-//                 }
-//             },
-//             {
-//                 $limit: 3
-//             },
-//             {
-//                 $sort: { totalPlayCount: -1 }
-//             },
-//             {
-//                 $limit: 10
-//             },
-//             // if i don't want to show playcount in output than i using group 
-//             {
-//                 $project: {
-//                     playListName: 1,
-//                     playlist_img: 1
-//                 }
-//             }
-//         ])
-//             .limit(3)
-//         console.log('🤷‍♀️', popularPlaylists);
-
-//         deferred.resolve(popularPlaylists);
-
-//     } catch (error) {
-//         console.log('userController.popular-', error);
-//         deferred.reject(error);
-//     }
-//     return deferred.promise;
-// }
-
 userController.popular = async (req, res) => {
     const deferred = Q.defer();
-    const { } = req.body;
     try {
         const search = req.query.search || '';
+
+        // const songggggg = await songMaster.find({ playCount: { $gte: 0 } });
+        // // console.log('😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀', songggggg);
 
         const popularSongs = await songMaster.aggregate([
             {
                 $match: {
                     deleted_at: null,
-                    playCount: { $gt: 1 }, // Filter for songs with playCount greater than 4
-                    ...(search && { songName: { $regex: new RegExp(search, 'i') } })
+                    playCount: { $gte: 0 },
+                    ...(search && { songName: { $regex: new RegExp(search, 'i') } }),
+                    ...({ category: req.query.category })
                 }
             },
             {
-                $unwind: '$playList_id'
+                $unwind: {
+                    path: '$playlistDetails',
+                    preserveNullAndEmptyArrays: true // This keeps the song even if no playlistDetails
+                }
             },
             {
                 $lookup: {
-                    from: 'playlist_masters', 
-                    localField: 'playList_id', 
+                    from: 'playlist_masters',
+                    localField: 'playList_id',
                     foreignField: '_id',
                     as: 'playlistDetails'
                 }
             },
-            // {
-            //     $unwind: '$playlistDetails'
-            // },
-            { $sort: { playCount: 1 } },
             {
-                $limit: 10
-            }
+                $unwind: '$playlistDetails'
+            },
+            // {
+            //     // Use $unwind to get a single playlist detail
+            //     $unwind: {
+            //         path: '$playlistDetails',
+            //         preserveNullAndEmptyArrays: true // This keeps the song even if no playlistDetails
+            //     }
+            // },
+            {
+                $project: {
+                    _id: 1,
+                    songName: 1,
+                    playList: {
+                        _id: '$playlistDetails._id',
+                        playListName: '$playlistDetails.playListName',
+                        playlist_img: { $concat: [baseURL, 'profile/', '$playlistDetails.playlist_img'] }
+                    }
+                }
+            },
+            { $limit: 4 }
         ]);
 
-        console.log('😀', popularSongs);
+        // const songs = popularSongs; // Songs are already structured correctly
 
-        if (!popularSongs || popularSongs.length === 0) {
-            deferred.reject("There are no popular songs yet.");
-            return deferred.promise;
-        }
-
-        const songs = popularSongs.map(song => ({
-            _id: song._id,
-            songName: song.songName,
-            playListName: song.playlistDetails.playListName,
-            playlist_img: baseURL + 'profile/' + song.playlistDetails.playlist_img
-        }));
-
-        deferred.resolve(songs);
-
-        // const popularSongs = await songMaster.find(
-        //     {
-        //         deleted_at: null,
-        //         playCount: { $gt: 4 },
-        //         ...(search && { songName: { $regex: new RegExp(search, 'i') } })
-        //     }
-        // ).select('songName songFile').limit(10).sort({ playCount: -1 })
-        // if (!popularSongs) {
-        //     deferred.reject("there is no popular songs yet.");
-        //     return deferred.promise;
-        // }
-        // const songs = popularSongs.map(song => ({
-        //     _id: song._id,
-        //     songName: song.songName,
-        //     songFile: baseURL + 'profile/' + song.songFile
-        // }))
-        // deferred.resolve(songs);
+        deferred.resolve(popularSongs);
     } catch (error) {
         console.log('userController.popular-', error);
         deferred.reject(error);
     }
     return deferred.promise;
-}
+};
 
 userController.home = async (req, res) => {
     const deferred = Q.defer();
@@ -412,9 +340,7 @@ userController.home = async (req, res) => {
 
         } else {
             const recentlySongs = await userController.recently(req, res)
-            console.log('recentlySing', recentlySongs)
             const popularSongs = await userController.popular(req, res);
-            console.log('popular', popularSongs);
 
             response.recently = recentlySongs;
             response.popular = popularSongs;
@@ -430,58 +356,262 @@ userController.home = async (req, res) => {
 
 userController.allSongs = async (req, res) => {
     const deferred = Q.defer();
-    const { search, side } = req.query;
+    const { side, type, category } = req.query;
+    let songs;
     try {
         const search = req.query.search || '';
-        let songs;
 
-        if (side == 'recently') {
-            songs = await songMaster.find({
-                deleted_at: null,
-                createdAt: { $gte: new Date(Date.now() - 29 * 24 * 60 * 60 * 1000) },
-                ...(search && { songName: { $regex: new RegExp(search, 'i') } })
-            })
-                .select('songName songFile')
-                .sort({ createdAt: -1 })
+        if (type == 'true') {
+            if (side == 'recently') {
+                songs = await songMaster.aggregate([
+                    {
+                        $match: {
+                            deleted_at: null,
+                            createdAt: { $gte: new Date(Date.now() - 29 * 24 * 60 * 60 * 1000) },
+                            ...(search && { songName: { $regex: new RegExp(search, 'i') } }),
+                            ...({ category: req.query.category })
+                        }
+                    },
+                    {
+                        $unwind: '$playList_id'
+                    },
+                    {
+                        $lookup: {
+                            from: 'playlist_masters',
+                            localField: 'playList_id',
+                            foreignField: '_id',
+                            as: 'playlistDetails'
+                        }
+                    },
+                    {
+                        $unwind: '$playlistDetails'
+                    },
+                    {
+                        $project: {
+                            _id: 1,
+                            songName: 1,
+                            playList: {
+                                _id: '$playlistDetails._id',
+                                playListName: '$playlistDetails.playListName',
+                                playlist_img: { $concat: [baseURL, 'profile/', '$playlistDetails.playlist_img'] } // Combine baseURL with the image path
+                            }
+                        }
+                    },
+                    { $sort: { createdAt: -1 } }
+                ]);
 
-            songs = songs.map(song => ({
-                _id: song._id,
-                songName: song.songName,
-                songFile: baseURL + 'profile/' + song.songFile
-            }))
-
-        } else if (side == 'popular') {
-            songs = await songMaster.find(
-                {
-                    deleted_at: null,
-                    playCount: { $gt: 4 },
-                    ...(search && { songName: { $regex: new RegExp(search, 'i') } })
+                if (songs == '') {
+                    deferred.reject(`The name ${search} does not exist in the recently songs.`);
+                    return deferred.promise;
                 }
-            ).select('songName songFile').limit(10).sort({ playCount: -1 })
-            if (!songs) {
-                deferred.reject("there is no popular songs yet.");
-                return deferred.promise;
-            }
-            songs = songs.map(song => ({
-                _id: song._id,
-                songName: song.songName,
-                songFile: baseURL + 'profile/' + song.songFile
-            }))
-        } else {
-            deferred.reject("Invalid side parameters")
-        }
 
+            } else if (side == 'popular') {
+                songs = await songMaster.aggregate([
+                    {
+                        $match: {
+                            deleted_at: null,
+                            playCount: { $gte: 0 },
+                            ...(search && { songName: { $regex: new RegExp(search, 'i') } }),
+                            ...({ category: req.query.category })
+                        }
+                    },
+                    {
+                        $unwind: {
+                            path: '$playlistDetails',
+                            preserveNullAndEmptyArrays: true
+                        }
+                    },
+                    {
+                        $lookup: {
+                            from: 'playlist_masters',
+                            localField: 'playList_id',
+                            foreignField: '_id',
+                            as: 'playlistDetails'
+                        }
+                    },
+                    {
+                        $unwind: '$playlistDetails'
+                    },
+                    // {
+                    //     // Use $unwind to get a single playlist detail
+                    //     $unwind: {
+                    //         path: '$playlistDetails',
+                    //         preserveNullAndEmptyArrays: true // This keeps the song even if no playlistDetails
+                    //     }
+                    // },
+                    {
+                        $project: {
+                            _id: 1,
+                            songName: 1,
+                            playList: {
+                                _id: '$playlistDetails._id',
+                                playListName: '$playlistDetails.playListName',
+                                playlist_img: { $concat: [baseURL, 'profile/', '$playlistDetails.playlist_img'] } // Combine baseURL with the image path
+                            }
+                        }
+                    }
+                ])
+                if (songs == '') {
+                    deferred.reject(`The name ${search} does not exist in the popular songs.`);
+                    return deferred.promise;
+                }
+            } else {
+                deferred.reject("Invalid side parameters")
+            }
+        }
         if (songs == '') {
             deferred.reject('No playList found.');
         }
-
         if (search) {
             songs = songs.filter(song => song.songName.match(new RegExp(search, 'i')));
         }
-
         deferred.resolve(songs);
     } catch (error) {
         console.log('userController.allSongs-', error);
+        deferred.reject(error);
+    }
+    return deferred.promise;
+}
+
+userController.getSongs = async (req, res) => {
+    const deferred = Q.defer();
+    const { playList_id, song_id, user_id } = req.body;
+    try {
+        const search = req.query.search || '';
+        let existplaylist = await playListMaster.findById(playList_id);
+        if (!existplaylist) {
+            return deferred.reject("This playList isn't exist.");
+        }
+        const songsDetails = await songMaster.aggregate([
+            {
+                $match: {
+                    deleted_at: null,
+                    playList_id: existplaylist._id,
+                    ...(search && { songName: { $regex: new RegExp(search, 'i') } })
+                }
+            },
+            {
+                $lookup: {
+                    from: 'artist_masters',
+                    localField: 'artist_id',
+                    foreignField: '_id',
+                    as: 'artistDetails'
+                }
+            },
+            {
+                $unwind: {
+                    path: '$artistDetails',
+                    preserveNullAndEmptyArrays: true // Keep documents even if artistDetails is null
+                }
+            },
+            {
+                $lookup: {
+                    from: 'favourite_masters',
+                    // let: { songId: '$_id', userId: new mongoose.Types.ObjectId(user._id) },
+                    let: { songId: '$_id' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $and: [
+                                        { $eq: ['$song_id', '$$songId'] },
+                                        // { $eq: ['$user_id', '$$userId'] }
+                                    ]
+                                }
+                            }
+                        }
+                    ],
+                    as: 'isFavorite'
+                }
+            },
+            {
+                $addFields: {
+                    favourite: { $cond: { if: { $gt: [{ $size: '$isFavorite' }, 0] }, then: 1, else: 0 } }
+                }
+            },
+            {
+                $project: {
+                    _id: 1,
+                    songName: 1,
+                    songFile: 1,
+                    artistName: '$artistDetails.artistName',
+                    favourite: 1
+                }
+            }
+        ]);
+        console.log('😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀', songsDetails)
+
+
+        if (songsDetails == '') {
+            deferred.reject("We are not able to find this song.");
+            // deferred.reject("We are not able to find any songs in this playlist.");
+            return deferred.promise;
+        }
+
+        if (song_id) {
+            const songExists = songsDetails.some(song => song._id.equals(song_id));
+            if (!songExists) {
+                deferred.reject("This song does not exist in the playlist.");
+                return deferred.promise;
+            }
+            await songMaster.findByIdAndUpdate(song_id, { $inc: { playCount: 1 } });
+        }
+
+        if (req.query.addToCart == 'true') {
+            if (!user_id) {
+                deferred.reject("user_id must be required if you want to add this song in cart.");
+                return deferred.promise;
+            }
+
+            if (req.body.user_id) {
+                const user = await userMaster.findById(user_id);
+                if (!user) {
+                    deferred.reject("We are not able to find this user.");
+                    return deferred.promise;
+                }
+            }
+
+            if (!req.body.song_id) {
+                deferred.reject("song_id must be required if you want to add this song in cart.");
+                return deferred.promise;
+            }
+
+            const songExist = songsDetails.some(song => song._id.equals(song_id));
+            if (!songExist) {
+                deferred.reject("this song doest not exist in this playlist.So can't add this song in cart.");
+                return deferred.promise;
+            }
+
+            let existCart = await cartMaster.findOne({ user_id: user_id, song_id: song_id });
+            if (existCart) {
+                deferred.reject("You already added this song in cart.");
+                return deferred.promise;
+            }
+            let addCart = new cartMaster();
+            addCart.song_id = song_id;
+            addCart.user_id = user_id;
+            await addCart.save();
+            deferred.resolve(addCart);
+            return deferred.promise;
+        }
+
+        const responseData = {
+            _id: existplaylist._id,
+            playListName: existplaylist.playListName,
+            playlist_img: baseURL + 'profile/' + existplaylist.playlist_img,
+            songs: songsDetails.map(song => ({
+                _id: song._id,
+                songName: song.songName,
+                songFile: baseURL + 'profile/' + song.songFile,
+                // artistName: song.artistName,
+                artistName: song.artistName,
+                favourite: song.favourite
+            }))
+        };
+
+        deferred.resolve(responseData);
+    } catch (error) {
+        console.log('userController.getSongs-', error);
         deferred.reject(error);
     }
     return deferred.promise;
@@ -534,258 +664,286 @@ userController.addToCart = async (req, res) => {
     return deferred.promise;
 }
 
-userController.recentlyPlaylistSongs = async (req, res) => {
+// userController.recentlyPlaylistSongs = async (req, res) => {
+//     const deferred = Q.defer();
+//     const { playList_id, song_id } = req.body;
+//     try {
+//         const user = req.user; // Fetch the user info
+//         console.log(user);
+//         let search = req.query.search || '';
+
+//         let playlist = await playListMaster.findById(playList_id);
+//         if (!playlist) {
+//             deferred.reject("We are not able to find this playlist.");
+//             return deferred.promise;
+//         }
+
+//         let pipeline = [
+//             {
+//                 $match: {
+//                     _id: new mongoose.Types.ObjectId(playList_id)
+//                 }
+//             },
+//             {
+//                 $lookup: {
+//                     from: 'song_masters',
+//                     localField: '_id',
+//                     foreignField: 'playList_id',
+//                     as: 'songs'
+//                 }
+//             },
+//             { $unwind: '$songs' },
+//             {
+//                 $match: {
+//                     ...(search && { 'songs.songName': { $regex: new RegExp(search, 'i') } })
+//                 }
+//             },
+//             {
+//                 $lookup: {
+//                     from: 'favourite_masters',
+//                     let: { songId: '$songs._id', userId: new mongoose.Types.ObjectId(user._id) },
+//                     pipeline: [
+//                         {
+//                             $match: {
+//                                 $expr: {
+//                                     $and: [
+//                                         { $eq: ['$song_id', '$$songId'] },
+//                                         { $eq: ['$user_id', '$$userId'] }
+//                                     ]
+//                                 }
+//                             }
+//                         }
+//                     ],
+//                     as: 'isFavorite'
+//                 }
+//             },
+//             {
+//                 $addFields: {
+//                     'songs.favourite': { $cond: { if: { $gt: [{ $size: '$isFavorite' }, 0] }, then: 1, else: 0 } }
+//                 }
+//             },
+//             {
+//                 $group: {
+//                     _id: '$_id',
+//                     songs: { $push: '$songs' }
+//                 }
+//             }
+//         ];
+
+
+//         let recentlyResponse = await playListMaster.aggregate(pipeline);
+//         console.log(recentlyResponse)
+//         if (recentlyResponse == '') {
+//             deferred.reject("We are not able to find any songs in this playlist.");
+//             return deferred.promise;
+//         }
+
+//         if (song_id) {
+//             const songExists = recentlyResponse[0].songs.some(song => song._id.equals(song_id));
+//             if (!songExists) {
+//                 deferred.reject("This song does not exist in the playlist.");
+//                 return deferred.promise;
+//             }
+
+//             await songMaster.findByIdAndUpdate(song_id, { $inc: { playCount: 1 } });
+//         }
+
+//         if (req.query.myCart == 'true') {
+//             if (!req.body.song_id) {
+//                 deferred.reject("song_id must be required if you want to add this song in cart.");
+//                 return deferred.promise;
+//             }
+//             let existCart = await cartMaster.findOne({ user_id: user._id, song_id: song_id });
+//             if (existCart) {
+//                 deferred.reject("You already added this song in cart.");
+//                 return deferred.promise;
+//             }
+//             let addCart = new cartMaster();
+//             addCart.song_id = song_id;
+//             addCart.user_id = user._id;
+//             await addCart.save();
+//             deferred.resolve(addCart);
+//             // return deferred.promise;
+//         }
+
+
+//         const songs = recentlyResponse[0].songs.map(song => ({
+//             _id: song._id,
+//             songName: song.songName,
+//             songFile: baseURL + 'profile/' + song.songFile,
+//             favourite: song.favourite // 1 if favorite, 0 if not
+//         }));
+//         console.log('👍', songs)
+//         deferred.resolve(songs);
+//     } catch (error) {
+//         console.error("userController.recentlyPlaylistSongs-", error);
+//         deferred.reject(error);
+//     }
+//     return deferred.promise;
+// };
+
+
+userController.getHomeSongs = async (req, res) => {
     const deferred = Q.defer();
-    const { playList_id, song_id } = req.body;
+    const { playList_id, song_id, user_id } = req.body;
     try {
-        const user = req.user; // Fetch the user info
-        console.log(user);
-        let search = req.query.search || '';
-
-        let playlist = await playListMaster.findById(playList_id);
-        if (!playlist) {
-            deferred.reject("We are not able to find this playlist.");
-            return deferred.promise;
-        }
-
-        let pipeline = [
-            {
-                $match: {
-                    _id: new mongoose.Types.ObjectId(playList_id)
-                }
-            },
-            {
-                $lookup: {
-                    from: 'song_masters',
-                    localField: '_id',
-                    foreignField: 'playList_id',
-                    as: 'songs'
-                }
-            },
-            { $unwind: '$songs' },
-            {
-                $match: {
-                    ...(search && { 'songs.songName': { $regex: new RegExp(search, 'i') } })
-                }
-            },
-            {
-                $lookup: {
-                    from: 'favourite_masters',
-                    let: { songId: '$songs._id', userId: new mongoose.Types.ObjectId(user._id) },
-                    pipeline: [
-                        {
-                            $match: {
-                                $expr: {
-                                    $and: [
-                                        { $eq: ['$song_id', '$$songId'] },
-                                        { $eq: ['$user_id', '$$userId'] }
-                                    ]
-                                }
-                            }
-                        }
-                    ],
-                    as: 'isFavorite'
-                }
-            },
-            {
-                $addFields: {
-                    'songs.favourite': { $cond: { if: { $gt: [{ $size: '$isFavorite' }, 0] }, then: 1, else: 0 } }
-                }
-            },
-            {
-                $group: {
-                    _id: '$_id',
-                    songs: { $push: '$songs' }
-                }
-            }
-        ];
-
-
-        let recentlyResponse = await playListMaster.aggregate(pipeline);
-        console.log(recentlyResponse)
-        if (recentlyResponse == '') {
-            deferred.reject("We are not able to find any songs in this playlist.");
-            return deferred.promise;
-        }
-
-        if (song_id) {
-            const songExists = recentlyResponse[0].songs.some(song => song._id.equals(song_id));
-            if (!songExists) {
-                deferred.reject("This song does not exist in the playlist.");
-                return deferred.promise;
-            }
-
-            await songMaster.findByIdAndUpdate(song_id, { $inc: { playCount: 1 } });
-        }
-
-        // if (addToCart == 'true' && user && song_id) {
-        //     try {
-        //         await userController.addToCart({ body: { song_id }, user });
-        //     } catch (cartError) {
-        //         deferred.reject(cartError);
-        //         return deferred.promise;
-        //     }
-        // }
-
-        if (req.query.myCart == 'true') {
-            if (!req.body.song_id) {
-                deferred.reject("song_id must be required if you want to add this song in cart.");
-                return deferred.promise;
-            }
-            let existCart = await cartMaster.findOne({ user_id: user._id, song_id: song_id });
-            if (existCart) {
-                deferred.reject("You already added this song in cart.");
-                return deferred.promise;
-            }
-            let addCart = new cartMaster();
-            addCart.song_id = song_id;
-            addCart.user_id = user._id;
-            await addCart.save();
-            deferred.resolve(addCart);
-            // return deferred.promise;
-        }
-
-
-        const songs = recentlyResponse[0].songs.map(song => ({
-            _id: song._id,
-            songName: song.songName,
-            songFile: baseURL + 'profile/' + song.songFile,
-            favourite: song.favourite // 1 if favorite, 0 if not
-        }));
-        console.log('👍', songs)
-        deferred.resolve(songs);
+        const getSongsDetails = await userController.getSongs({
+            body: { playList_id, song_id, user_id },
+            query: req.query   // this conditions is for optionally.
+        });
+        deferred.resolve(getSongsDetails);
     } catch (error) {
-        console.error("userController.recentlyPlaylistSongs-", error);
-        deferred.reject(error);
-    }
-    return deferred.promise;
-};
-
-userController.Songs = async (req, res) => {
-    const deferred = Q.defer();
-    const { } = req.body;
-    try {
-
-    } catch (error) {
-        console.log('usercontroller.Songs-', error);
+        console.log('userController.getHomeSongs-', error);
         deferred.reject(error);
     }
     return deferred.promise;
 }
 
-userController.popularPlaylistSongs = async (req, res) => {
+userController.getRecentlySongs = async (req, res) => {
+    const { playList_id, user_id, song_id } = req.body;
     const deferred = Q.defer();
-    const { song_id, popularList_id, addToCart } = req.body;
     try {
-        const user = req.user;
-        let search = req.query.search || '';
-
-        const popularexist = await playListMaster.findById(popularList_id);
-        if (!popularexist) {
-            deferred.reject("We are not able to find this playlist.");
-            return deferred.promise;
-        }
-        let pipeline = [
-            {
-                $match: {
-                    playList_id: new mongoose.Types.ObjectId(popularList_id),
-                    ...(search && { songName: { $regex: new RegExp(search, 'i') } })
-                }
-            },
-            {
-                $lookup: {
-                    from: 'favourite_masters',
-                    let: { songId: '$_id', userId: new mongoose.Types.ObjectId(user._id) },
-                    pipeline: [
-                        {
-                            $match: {
-                                $expr: {
-                                    $and: [
-                                        { $eq: ['$song_id', '$$songId'] },
-                                        { $eq: ['$user_id', '$$userId'] }
-                                    ]
-                                }
-                            }
-                        }
-                    ],
-                    as: 'isFavorite'
-                }
-            },
-            {
-                $addFields: {
-                    favourite: { $cond: { if: { $gt: [{ $size: '$isFavorite' }, 0] }, then: 1, else: 0 } }
-                }
-            },
-            {
-                $project: {
-                    _id: 1,
-                    songName: 1,
-                    songFile: { $concat: [baseURL, 'profile/', '$songFile'] },
-                    favourite: 1
-                }
-            }
-        ];
-
-        let showALLsongs = await songMaster.aggregate(pipeline);
-
-        if (showALLsongs == '') {
-            // if (!showALLsongs || showALLsongs.length === 0) {
-            deferred.reject("No songs found in this playlist.");
-            return deferred.promise;
-        }
-
-        if (song_id) {
-            const songExists = showALLsongs.some(song => song._id.equals(song_id));
-            if (!songExists) {
-                deferred.reject("This song does not exist in the playlist.");
-                return deferred.promise;
-            }
-            await songMaster.findByIdAndUpdate(song_id, { $inc: { playCount: 1 } });
-        }
-
-        // if (addToCart == 'true' && user && song_id) {
-        //     try {
-        //         await userController.addToCart(req.body);
-        //         // await userController.addToCart({ body: { song_id }, user });
-        //     } catch (cartError) {
-        //         deferred.reject(cartError);
-        //         return deferred.promise;
-        //     }
-        // }
-
-        if (req.query.myCart == 'true') {
-            if (!req.body.song_id) {
-                deferred.reject("song_id must be required if want to add this song in cart.");
-                return deferred.promise;
-            }
-            let existCart = await cartMaster.findOne({ user_id: user._id, song_id: song_id });
-            if (existCart) {
-                deferred.reject("You already added this song in cart.");
-                return deferred.promise;
-            }
-            let addCart = new cartMaster();
-            addCart.song_id = song_id;
-            addCart.user_id = user._id;
-            await addCart.save();
-            deferred.resolve(addCart);
-            return deferred.promise;
-        }
-
-
-        const songs = showALLsongs.map(song => ({
-            _id: song._id,
-            songName: song.songName,
-            songFile: song.songFile,
-            favourite: song.favourite // 1 if favorite, 0 if not
-        }));
-
-        deferred.resolve(songs);
+        const getSongsDetails = await userController.getSongs({
+            body: { playList_id, song_id, user_id },
+            query: req.query   // this conditions is for optionally.
+        });
+        deferred.resolve(getSongsDetails);
     } catch (error) {
-        console.error("userController.popularPlaylistSongs -", error);
+        console.log('usercontroller.getREcentlySongs-', error);
         deferred.reject(error);
     }
     return deferred.promise;
 };
+
+userController.getPopularSongs = async (req, res) => {
+    const deferred = Q.defer();
+    const { playList_id, user_id, song_id } = req.body;
+    try {
+        const getSongsDetails = await userController.getSongs({
+            body: { playList_id, song_id, user_id },
+            query: req.query   // this conditions is for optionally.
+        });
+        deferred.resolve(getSongsDetails);
+    } catch (error) {
+        console.log('usercontroller.getREcentlySongs-', error);
+        deferred.reject(error);
+    }
+    return deferred.promise;
+};
+
+// userController.popularPlaylistSongs = async (req, res) => {
+//     const deferred = Q.defer();
+//     const { song_id, popularList_id, addToCart } = req.body;
+//     try {
+//         const user = req.user;
+//         let search = req.query.search || '';
+
+//         const popularexist = await playListMaster.findById(popularList_id);
+//         if (!popularexist) {
+//             deferred.reject("We are not able to find this playlist.");
+//             return deferred.promise;
+//         }
+//         let pipeline = [
+//             {
+//                 $match: {
+//                     playList_id: new mongoose.Types.ObjectId(popularList_id),
+//                     ...(search && { songName: { $regex: new RegExp(search, 'i') } })
+//                 }
+//             },
+//             {
+//                 $lookup: {
+//                     from: 'favourite_masters',
+//                     let: { songId: '$_id', userId: new mongoose.Types.ObjectId(user._id) },
+//                     pipeline: [
+//                         {
+//                             $match: {
+//                                 $expr: {
+//                                     $and: [
+//                                         { $eq: ['$song_id', '$$songId'] },
+//                                         { $eq: ['$user_id', '$$userId'] }
+//                                     ]
+//                                 }
+//                             }
+//                         }
+//                     ],
+//                     as: 'isFavorite'
+//                 }
+//             },
+//             {
+//                 $addFields: {
+//                     favourite: { $cond: { if: { $gt: [{ $size: '$isFavorite' }, 0] }, then: 1, else: 0 } }
+//                 }
+//             },
+//             {
+//                 $project: {
+//                     _id: 1,
+//                     songName: 1,
+//                     songFile: { $concat: [baseURL, 'profile/', '$songFile'] },
+//                     favourite: 1
+//                 }
+//             }
+//         ];
+
+//         let showALLsongs = await songMaster.aggregate(pipeline);
+
+//         if (showALLsongs == '') {
+//             // if (!showALLsongs || showALLsongs.length === 0) {
+//             deferred.reject("No songs found in this playlist.");
+//             return deferred.promise;
+//         }
+
+//         if (song_id) {
+//             const songExists = showALLsongs.some(song => song._id.equals(song_id));
+//             if (!songExists) {
+//                 deferred.reject("This song does not exist in the playlist.");
+//                 return deferred.promise;
+//             }
+//             await songMaster.findByIdAndUpdate(song_id, { $inc: { playCount: 1 } });
+//         }
+
+//         // if (addToCart == 'true' && user && song_id) {
+//         //     try {
+//         //         await userController.addToCart(req.body);
+//         //         // await userController.addToCart({ body: { song_id }, user });
+//         //     } catch (cartError) {
+//         //         deferred.reject(cartError);
+//         //         return deferred.promise;
+//         //     }
+//         // }
+
+//         if (req.query.myCart == 'true') {
+//             if (!req.body.song_id) {
+//                 deferred.reject("song_id must be required if want to add this song in cart.");
+//                 return deferred.promise;
+//             }
+//             let existCart = await cartMaster.findOne({ user_id: user._id, song_id: song_id });
+//             if (existCart) {
+//                 deferred.reject("You already added this song in cart.");
+//                 return deferred.promise;
+//             }
+//             let addCart = new cartMaster();
+//             addCart.song_id = song_id;
+//             addCart.user_id = user._id;
+//             await addCart.save();
+//             deferred.resolve(addCart);
+//             return deferred.promise;
+//         }
+
+
+//         const songs = showALLsongs.map(song => ({
+//             _id: song._id,
+//             songName: song.songName,
+//             songFile: song.songFile,
+//             favourite: song.favourite // 1 if favorite, 0 if not
+//         }));
+
+//         deferred.resolve(songs);
+//     } catch (error) {
+//         console.error("userController.popularPlaylistSongs -", error);
+//         deferred.reject(error);
+//     }
+//     return deferred.promise;
+// };
 
 userController.searchByArtist = async (req, res) => {
     const deferred = Q.defer();
@@ -823,17 +981,10 @@ userController.searchByArtist = async (req, res) => {
     return deferred.promise;
 };
 
-userController.searchByArtistSongs = async (req, res) => {
+userController.getByArtistSongs = async (req, res) => {
     const deferred = Q.defer();
-    const { artist_id, song_id, addToCart } = req.body;
+    const { artist_id, song_id, user_id } = req.body;
     try {
-        console.log(req.body);
-        let user = req.user;
-        console.log(user);
-        if (!user) {
-            deferred.reject('invalid_user_id');
-            return deferred.promise;
-        }
         const search = req.query.search || '';
         const artistList = await artistMaster.findById(artist_id);
         if (!artistList) {
@@ -844,21 +995,196 @@ userController.searchByArtistSongs = async (req, res) => {
         const pipeline = [
             {
                 $match: {
-                    artist_id: new mongoose.Types.ObjectId(artist_id),
+                    deleted_all: null,
+                    artist_id: artistList._id,
                     ...(search && { songName: { $regex: new RegExp(search, 'i') } })
                 }
             },
             {
                 $lookup: {
+                    from: 'artist_masters',
+                    localField: 'artist_id',
+                    foreignField: '_id',
+                    as: 'artistDetails',
+                }
+            },
+            {
+                $unwind: {
+                    path: '$artistDetails',
+                    preserveNullAndEmptyArrays: true // Keep documents even if artistDetails is null
+                }
+            },
+            {
+                $lookup: {
                     from: 'favourite_masters',
-                    let: { songId: '$_id', userId: new mongoose.Types.ObjectId(user._id) },
+                    let: { songId: '$_id' },
+                    // let: { songId: '$_id', userId: new mongoose.Types.ObjectId(user._id) },
                     pipeline: [
                         {
                             $match: {
                                 $expr: {
                                     $and: [
                                         { $eq: ['$song_id', '$$songId'] },
-                                        { $eq: ['$user_id', '$$userId'] }
+                                        // { $eq: ['$user_id', '$$userId'] }
+                                    ]
+                                }
+                            }
+                        }
+                    ],
+                    as: 'isFavourite'
+                }
+            },
+            {
+                $addFields: {
+                    favourite: { $cond: { if: { $gt: [{ $size: '$isFavourite' }, 0] }, then: 1, else: 0 } }
+                }
+            },
+            {
+                $project: {
+                    _id: 1,
+                    songName: 1,
+                    artistName: '$artistDetails.artistName',
+                    songFile: 1,
+                    // songFile: { $concXat: [baseURL, 'profile/', '$songFile'] },
+                    favourite: 1
+                }
+            }
+        ];
+
+        let showALLsongs = await songMaster.aggregate(pipeline);
+        console.log('😀😀😀😀😀', showALLsongs)
+        if (showALLsongs == '') {
+            deferred.reject('No song found in this playList.')
+            return deferred.promise;
+        }
+
+        if (song_id) {
+            let songExist = showALLsongs.some(song => song._id.equals(song_id));
+            if (!songExist) {
+                deferred.reject("These song deosn't exist in artistList.");
+                return deferred.promise;
+            }
+            await songMaster.findByIdAndUpdate(song_id, { $inc: { playCount: 1 } })
+        }
+
+        if (req.query.myCart == 'true') {
+            if (!user_id) {
+                deferred.reject("user_id must be required if you want to add this song in cart.");
+                return deferred.promise;
+            }
+
+            if (req.body.user_id) {
+                const user = await userMaster.findById(user_id);
+                if (!user) {
+                    deferred.reject("We are not able to find this user.");
+                    return deferred.promise;
+                }
+            }
+
+            if (!req.body.song_id) {
+                deferred.reject("song_id must be required if you want to add this song in cart.");
+                return deferred.promise;
+            }
+
+            let existCart = await cartMaster.findOne({ user_id: user_id, song_id: song_id });
+            if (existCart) {
+                deferred.reject("You already added this song in cart.");
+                return deferred.promise;
+            }
+            let addCart = new cartMaster();
+            addCart.song_id = song_id;
+            addCart.user_id = user_id;
+            await addCart.save();
+            deferred.resolve(addCart);
+            return deferred.promise;
+        }
+
+        const responseData = {
+            _id: artistList._id,
+            artistName: artistList.artistName,
+            artistImg: baseURL + 'profile/' + artistList.artistImg,
+            songs: showALLsongs.map(song => ({
+                _id: song._id,
+                songName: song.songName,
+                songFile: baseURL + 'profile/' + song.songFile,
+                // artistName: song.artistName,
+                artistName: song.artistName,
+                favourite: song.favourite
+            }))
+        }
+
+        deferred.resolve(responseData);
+    } catch (error) {
+        console.log('usercontroller.searchByArtistSongs-', error);
+        deferred.reject(error);
+    }
+    return deferred.promise;
+};
+
+userController.gospelSongs = async (req, res) => {
+    const deferred = Q.defer();
+    const { side, type } = req.query;
+    try {
+        let response = {};
+        if (type == 'true') {
+            // if (side == 'gospelAllSongs' || side == 'recently' || side == 'popular') {
+            if (side == 'recently' || side == 'popular') {
+                // if (side == 'gospelAllSongs' ) {
+                //     response = await userController.getAllGospelSongs(req, res);
+                // } 
+                if (side == 'recently') {
+                    let recently = await userController.allSongs(req, res);
+                    response.recently = recently;
+                } else if (side == 'popular') {
+                    let popular = await userController.allSongs(req, res);
+                    response.popular = popular;
+                }
+            } else {
+                deferred.reject("Your added value in side is wrong please enter correct side.")
+            }
+        } else {
+            let recently = await userController.recently(req, res);
+            let popular = await userController.popular(req, res);
+
+            response.recently = recently;
+            response.popular = popular;
+
+            // response.recently = recently.filter(song => song.category = 'Gospel Song');
+            // response.popular = popular.filter(song => song.category = 'Gospel Song');
+        }
+
+        deferred.resolve(response);
+    } catch (error) {
+        console.log('userController.gospelSongs-', error);
+        deferred.reject(error);
+    }
+    return deferred.promise;
+};
+
+userController.getAllGospelSongs = async (req, res) => {
+    const deferred = Q.defer();
+    const { song_id, user_id } = req.body;
+    try {
+        let search = req.query.search || '';
+        let pipeline = [
+            {
+                $match: {
+                    category: 'Gospel Song',
+                    ...(search && { songName: { $regex: new RegExp(search, 'i') } })
+                }
+            },
+            {
+                $lookup: {
+                    from: 'favourite_masters',
+                    // let: { songId: '$_id' },
+                    let: { songId: '$_id' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $and: [
+                                        { $eq: ['$song_id', '$$songId'] },
+                                        // { $eq: ['$user_id', '$$userId'] }
                                     ]
                                 }
                             }
@@ -882,194 +1208,63 @@ userController.searchByArtistSongs = async (req, res) => {
             }
         ];
 
-        let showALLsongs = await songMaster.aggregate(pipeline);
-        if (showALLsongs == '') {
-            deferred.reject('No song found in this playList.')
+        let showALLHymnsSongs = await songMaster.aggregate(pipeline);
+
+        if (!showALLGospelSongs) {
+            deferred.reject("We are not able to find any songs");
             return deferred.promise;
         }
 
         if (song_id) {
-            let songExist = showALLsongs.some(song => song._id.equals(song_id));
-            if (!songExist) {
-                deferred.reject("These song deosn't exist in this playList.");
+            const songExists = showALLGospelSongs.some(song => song._id.equals(song_id));
+            if (!songExists) {
+                deferred.reject("This song does not exist in the playlist.");
                 return deferred.promise;
             }
-            await songMaster.findByIdAndUpdate(song_id, { $inc: { playCount: 1 } })
+            await songMaster.findByIdAndUpdate(song_id, { $inc: { playCount: 1 } });
         }
 
-        if (req.query.myCart == 'true') {
+        if (req.query.addToCart == 'true') {
             if (!req.body.song_id) {
                 deferred.reject("song_id must be required if want to add this song in cart.");
                 return deferred.promise;
             }
-            let existCart = await cartMaster.findOne({ user_id: user._id, song_id: song_id });
+            if (!req.body.user_id) {
+                deferred.reject("user_id must be required if want to add this song in cart.");
+                return deferred.promise;
+            }
+            let existCart = await cartMaster.findOne({ user_id: user_id, song_id: song_id });
             if (existCart) {
                 deferred.reject("You already added this song in cart.");
                 return deferred.promise;
             }
             let addCart = new cartMaster();
             addCart.song_id = song_id;
-            addCart.user_id = user._id;
+            addCart.user_id = user_id;
             await addCart.save();
             deferred.resolve(addCart);
             return deferred.promise;
         }
 
-        const songs = showALLsongs.map(song => ({
-            _id: song._id,
-            songName: song.songName,
-            songFile: song.songFile,
-            favourite: song.favourite
-        }));
-
-        deferred.resolve(songs);
+        deferred.resolve(showALLGospelSongs);
     } catch (error) {
-        console.log('usercontroller.searchByArtistSongs-', error);
+        console.log('userController.getAllGospelSongs-', error);
         deferred.reject(error);
     }
     return deferred.promise;
 };
 
-userController.gospelShowallSongs = async (req, res) => {
+userController.getGospelSongs = async (req, res) => {
     const deferred = Q.defer();
-    const { song_id } = req.body;
+    const { playList_id, song_id, user_id } = req.body;
     try {
-        let user = req.user;
-        let search = req.query.search || '';
-        if (req.query.side == 'gospelAllSongs') {
-            // let showALLGospelSongs = await songMaster.find({ category: 'Gospel Song', ...(search && { songName: { $regex: new RegExp(search, 'i') } }) })
-            // if (!showALLGospelSongs) {
-            //     deferred.reject("We are not able to find any songs");
-            //     return deferred.promise;
-            // };
-            // let songList = showALLGospelSongs.map(song => ({
-            //     _id: song._id,
-            //     songName: song.songName,
-            //     songFile: baseURL + 'profile/' + song.songFile
-            // }))
-            let pipeline = [
-                {
-                    $match: {
-                        category: 'Gospel Song',
-                        ...(search && { songName: { $regex: new RegExp(search, 'i') } })
-                    }
-                },
-                {
-                    $lookup: {
-                        from: 'favourite_masters',
-                        // let: { songId: '$_id' },
-                        let: { songId: '$_id', userId: new mongoose.Types.ObjectId(req.user._id) },
-                        pipeline: [
-                            {
-                                $match: {
-                                    $expr: {
-                                        $and: [
-                                            { $eq: ['$song_id', '$$songId'] },
-                                            { $eq: ['$user_id', '$$userId'] }
-                                        ]
-                                    }
-                                }
-                            }
-                        ],
-                        as: 'isFavourite'
-                    }
-                },
-                {
-                    $addFields: {
-                        favourite: { $cond: { if: { $gt: [{ $size: '$isFavourite' }, 0] }, then: 1, else: 0 } }
-                    }
-                },
-                {
-                    $project: {
-                        _id: 1,
-                        songName: 1,
-                        songFile: { $concat: [baseURL, 'profile/', '$songFile'] },
-                        favourite: 1
-                    }
-                }
-            ];
-
-            let showALLGospelSongs = await songMaster.aggregate(pipeline);
-
-            if (!showALLGospelSongs) {
-                deferred.reject("We are not able to find any songs");
-                return deferred.promise;
-            }
-
-            if (song_id) {
-                const songExists = showALLGospelSongs.some(song => song._id.equals(song_id));
-                if (!songExists) {
-                    deferred.reject("This song does not exist in the playlist.");
-                    return deferred.promise;
-                }
-                await songMaster.findByIdAndUpdate(song_id, { $inc: { playCount: 1 } });
-            }
-
-            if (req.query.myCart == 'true') {
-                if (!req.body.song_id) {
-                    deferred.reject("song_id must be required if want to add this song in cart.");
-                    return deferred.promise;
-                }
-                let existCart = await cartMaster.findOne({ user_id: user._id, song_id: song_id });
-                if (existCart) {
-                    deferred.reject("You already added this song in cart.");
-                    return deferred.promise;
-                }
-                let addCart = new cartMaster();
-                addCart.song_id = song_id;
-                addCart.user_id = user._id;
-                await addCart.save();
-                deferred.resolve(addCart);
-                return deferred.promise;
-            }
-
-            deferred.resolve(showALLGospelSongs);
-        } else {
-            deferred.reject("Please enter correct gospel's value.");
-        }
+        const getSongDetails = await userController.getSongs({
+            body: { playList_id, song_id, user_id },
+            query: req.query // this condition is optional.
+        });
+        deferred.resolve(getSongDetails);
     } catch (error) {
-        console.log('userController.gospelShowallSongs-', error);
-        deferred.reject(error);
-    }
-    return deferred.promise;
-}
-
-userController.gospelSongs = async (req, res) => {
-    const deferred = Q.defer();
-    const { side, type } = req.query;
-    try {
-        let response = {};
-        if ((side == 'gospelAllSongs' || side == 'recently' || side == 'popular') && type !== 'true') {
-            deferred.reject('Please enter first type.');
-            return deferred.promise;
-        }
-        if (type == 'true') {
-            if (side == 'gospelAllSongs' || side == 'recently' || side == 'popular') {
-                if (side == 'gospelAllSongs' || req.query.myCart == 'true') {
-                    response = await userController.gospelShowallSongs(req, res);
-                    // let gospel = await userController.gospelShowallSongs(req, res);
-                    // response.gospelAllSongs = gospel;
-                } else if (side == 'recently') {
-                    let recently = await userController.recently(req, res);
-                    response.recently = recently;
-                } else if (side == 'popular') {
-                    let popular = await userController.popular(req, res);
-                    response.popular = popular;
-                }
-            } else {
-                deferred.reject("You added value in side is wrong please enter correct side.")
-            }
-        } else {
-            let recently = await userController.recently(req, res);
-            let popular = await userController.popular(req, res);
-
-            response.recently = recently;
-            response.popular = popular;
-        }
-
-        deferred.resolve(response);
-    } catch (error) {
-        console.log('userController.gospelSongs-', error);
+        console.log('userController.getGospelSongs-', error);
         deferred.reject(error);
     }
     return deferred.promise;
@@ -1180,21 +1375,13 @@ userController.contemporarySongs = async (req, res) => {
     const { side, type } = req.query;
     try {
         let response = {};
-        if ((side == 'contemporaryAllSongs' || side == 'recently' || side == 'popular') && type !== 'true') {
-            deferred.reject('Please enter first type.');
-            return deferred.promise;
-        }
         if (type == 'true') {
-            if (side == 'contemporaryAllSongs' || side == 'recently' || side == 'popular') {
-                if (side == 'contemporaryAllSongs' || req.query.myCart == 'true') {
-                    response = await userController.contemporaryShowALLSongs(req, res);
-                    // let gospel = await userController.gospelShowallSongs(req, res);
-                    // response.gospelAllSongs = gospel;
-                } else if (side == 'recently') {
-                    let recently = await userController.recently(req, res);
+            if (side == 'recently' || side == 'popular') {
+                if (side == 'recently') {
+                    let recently = await userController.allSongs(req, res);
                     response.recently = recently;
                 } else if (side == 'popular') {
-                    let popular = await userController.popular(req, res);
+                    let popular = await userController.allSongs(req, res);
                     response.popular = popular;
                 }
             } else {
@@ -1216,96 +1403,113 @@ userController.contemporarySongs = async (req, res) => {
     return deferred.promise;
 }
 
-userController.hymnsShowAllSongs = async (req, res) => {
-    const deferred = Q.defer();
-    const { song_id } = req.body;
+userController.getContemporarySongs = async (req, res) => {
+    const deferred = Q.defer()
+    const { playList_id, user_id, song_id } = req.body;
     try {
-        let user = req.user;
-        if (!user) {
-            deferred.reject("invalid_user_id");
-            return deferred.promise;
-        }
-        const search = req.query.search || '';
-        if (req.query.side == 'hymnsSongs') {
-            let pipeline = [
-                {
-                    $match: {
-                        category: 'Hymns',
-                        ...(search && { songName: { $regex: new RegExp(search, 'i') } })
-                    }
-                },
-                {
-                    $lookup: {
-                        from: 'favourite_masters',
-                        let: { songId: '$_id', userId: new mongoose.Types.ObjectId(user._id) },
-                        pipeline: [
-                            {
-                                $match: {
-                                    $expr: {
-                                        $and: [
-                                            { $eq: ['$song_id', '$$songId'] },
-                                            { $eq: ['$user_id', '$$userId'] }
-                                        ]
-                                    }
-                                }
-                            }
-                        ],
-                        as: 'isFavourite'
-                    }
-                },
-                {
-                    $addFields: {
-                        favourite: { $cond: { if: { $gt: [{ $size: 'isFavourite' }, 0] }, then: 1, else: 0 } }
-                    }
-                },
-                {
-                    $project: {
-                        _id: 1,
-                        songName: 1,
-                        songFile: { $concat: [baseURL, 'profile/', '$songFile'] },
-                        favourite: 1
-                    }
-                }
-            ];
-
-            let hymnsAllSongs = await songMaster.aggregate(pipeline);
-            if (hymnsAllSongs == '') {
-                deferred.reject("We are not able to find any songs.");
-                return deferred.promise;
-            }
-
-            if (song_id) {
-                let existSong = hymnsAllSongs.some(song => song._id.equals(song_id));
-                if (!existSong) {
-                    deferred.reject("This songs is not available.");
-                    return deferred.promise;
-                }
-                await songMaster.findById(song_id, { $inc: { playCount: 1 } })
-            }
-
-            if (req.query.myCart == 'true') {
-                let existCart = await cartMaster.findOne({ user_id: user._id, song_id: song_id })
-                if (existCart) {
-                    deferred.reject("You already added this song in cart");
-                    return deferred.promise;
-                }
-                const addCart = new cartMaster();
-                addCart.user_id = user._id;
-                addCart.song_id = song_id;
-                await addCart.save();
-                deferred.resolve(addCart);
-                return deferred.promise;
-            }
-
-            deferred.resolve(showALLGospelSongs);
-        } else {
-            deferred.reject("Please enter correct Hymns's value.");
-        }
+        const songDetails = await userController.getSongs({
+            body: { playList_id, user_id, song_id },
+            query: req.query // optional condition.
+        });
+        deferred.resolve(songDetails);
     } catch (error) {
-        console.log('userController.hymnsShowALLSongs-', error);
+        console.log('userController.getContemporarySongs-', error);
         deferred.reject(error);
     }
-    return deferred.promis;
+    return deferred.promise;
+}
+
+userController.getAllContemporaryChristianSongs = async (req, res) => {
+    const deferred = Q.defer();
+    const { song_id, user_id } = req.body;
+    try {
+        let search = req.query.search || '';
+        let pipeline = [
+            {
+                $match: {
+                    category: 'Contemporary Christian songs',
+                    ...(search && { songName: { $regex: new RegExp(search, 'i') } })
+                }
+            },
+            {
+                $lookup: {
+                    from: 'favourite_masters',
+                    // let: { songId: '$_id' },
+                    let: { songId: '$_id' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $and: [
+                                        { $eq: ['$song_id', '$$songId'] },
+                                        // { $eq: ['$user_id', '$$userId'] }
+                                    ]
+                                }
+                            }
+                        }
+                    ],
+                    as: 'isFavourite'
+                }
+            },
+            {
+                $addFields: {
+                    favourite: { $cond: { if: { $gt: [{ $size: '$isFavourite' }, 0] }, then: 1, else: 0 } }
+                }
+            },
+            {
+                $project: {
+                    _id: 1,
+                    songName: 1,
+                    songFile: { $concat: [baseURL, 'profile/', '$songFile'] },
+                    favourite: 1
+                }
+            }
+        ];
+
+        let showALLContemporarySongs = await songMaster.aggregate(pipeline);
+
+        if (!showALLContemporarySongs) {
+            deferred.reject("We are not able to find any songs");
+            return deferred.promise;
+        }
+
+        if (song_id) {
+            const songExists = showALLContemporarySongs.some(song => song._id.equals(song_id));
+            if (!songExists) {
+                deferred.reject("This song does not exist in the playlist.");
+                return deferred.promise;
+            }
+            await songMaster.findByIdAndUpdate(song_id, { $inc: { playCount: 1 } });
+        }
+
+        if (req.query.addToCart == 'true') {
+            if (!req.body.song_id) {
+                deferred.reject("song_id must be required if want to add this song in cart.");
+                return deferred.promise;
+            }
+            if (!req.body.user_id) {
+                deferred.reject("user_id must be required if want to add this song in cart.");
+                return deferred.promise;
+            }
+            let existCart = await cartMaster.findOne({ user_id: user_id, song_id: song_id });
+            if (existCart) {
+                deferred.reject("You already added this song in cart.");
+                return deferred.promise;
+            }
+            let addCart = new cartMaster();
+            addCart.song_id = song_id;
+            addCart.user_id = user_id;
+            await addCart.save();
+            deferred.resolve(addCart);
+            return deferred.promise;
+        }
+
+        deferred.resolve(showALLContemporarySongs);
+    } catch (error) {
+        console.log('userController.getAllContemporaryChristianSongs-', error);
+        deferred.reject(error);
+    }
+    return deferred.promise;
 }
 
 userController.hymnsSongs = async (req, res) => {
@@ -1313,17 +1517,9 @@ userController.hymnsSongs = async (req, res) => {
     const { side, type } = req.query;
     try {
         let response = {};
-        if ((side == 'hymnsAllSongs' || side == 'recently' || side == 'popular') && type !== 'true') {
-            deferred.reject('Please enter first type.');
-            return deferred.promise;
-        }
         if (type == 'true') {
-            if (side == 'hymnsAllSongs' || side == 'recently' || side == 'popular') {
-                if (side == 'hymnsAllSongs' || req.query.myCart == 'true') {
-                    response = await userController.hymnsShowAllSongs(req, res);
-                    // let gospel = await userController.gospelShowallSongs(req, res);
-                    // response.gospelAllSongs = gospel;
-                } else if (side == 'recently') {
+            if (side == 'recently' || side == 'popular') {
+                if (side == 'recently') {
                     let recently = await userController.recently(req, res);
                     response.recently = recently;
                 } else if (side == 'popular') {
@@ -1349,6 +1545,115 @@ userController.hymnsSongs = async (req, res) => {
     return deferred.promise;
 }
 
+userController.getHymnsSongs = async (req, res) => {
+    const deferred = Q.defer();
+    const { playList_id, user_id, song_id } = req.body;
+    try {
+        const songDetails = await userController.getSongs({
+            body: { playList_id, song_id, user_id },
+            query: req.query
+        });
+        deferred.resolve(songDetails);
+    } catch (error) {
+        console.log('userController.getHymnsSongs-', error);
+        deferred.reject(error);
+    }
+    return deferred.promise;
+}
+
+userController.getAllHymnsSongs = async (req, res) => {
+    const deferred = Q.defer();
+    const { song_id, user_id } = req.body;
+    try {
+        let search = req.query.search || '';
+        let pipeline = [
+            {
+                $match: {
+                    category: 'Gospel Song',
+                    ...(search && { songName: { $regex: new RegExp(search, 'i') } })
+                }
+            },
+            {
+                $lookup: {
+                    from: 'favourite_masters',
+                    // let: { songId: '$_id' },
+                    let: { songId: '$_id' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $and: [
+                                        { $eq: ['$song_id', '$$songId'] },
+                                        // { $eq: ['$user_id', '$$userId'] }
+                                    ]
+                                }
+                            }
+                        }
+                    ],
+                    as: 'isFavourite'
+                }
+            },
+            {
+                $addFields: {
+                    favourite: { $cond: { if: { $gt: [{ $size: '$isFavourite' }, 0] }, then: 1, else: 0 } }
+                }
+            },
+            {
+                $project: {
+                    _id: 1,
+                    songName: 1,
+                    songFile: { $concat: [baseURL, 'profile/', '$songFile'] },
+                    favourite: 1
+                }
+            }
+        ];
+
+        let showALLHymnsSongs = await songMaster.aggregate(pipeline);
+
+        if (!showALLHymnsSongs) {
+            deferred.reject("We are not able to find any songs");
+            return deferred.promise;
+        }
+
+        if (song_id) {
+            const songExists = showALLHymnsSongs.some(song => song._id.equals(song_id));
+            if (!songExists) {
+                deferred.reject("This song does not exist in the playlist.");
+                return deferred.promise;
+            }
+            await songMaster.findByIdAndUpdate(song_id, { $inc: { playCount: 1 } });
+        }
+
+        if (req.query.addToCart == 'true') {
+            if (!req.body.song_id) {
+                deferred.reject("song_id must be required if want to add this song in cart.");
+                return deferred.promise;
+            }
+            if (!req.body.user_id) {
+                deferred.reject("user_id must be required if want to add this song in cart.");
+                return deferred.promise;
+            }
+            let existCart = await cartMaster.findOne({ user_id: user_id, song_id: song_id });
+            if (existCart) {
+                deferred.reject("You already added this song in cart.");
+                return deferred.promise;
+            }
+            let addCart = new cartMaster();
+            addCart.song_id = song_id;
+            addCart.user_id = user_id;
+            await addCart.save();
+            deferred.resolve(addCart);
+            return deferred.promise;
+        }
+
+        deferred.resolve(showALLHymnsSongs);
+    } catch (error) {
+        console.log('userController.getAllHymnsSongs-', error);
+        deferred.reject(error);
+    }
+    return deferred.promise;
+}
+
 userController.updateProfile = async (req, res) => {
     const deferred = Q.defer();
     const { name, phone, address, oldPassword, newPassword, confirmPassword } = req.body;
@@ -1359,23 +1664,45 @@ userController.updateProfile = async (req, res) => {
             return deferred.promise;
         }
         let update = await userMaster.findByIdAndUpdate(user._id, { name: name, phone: phone, address: address }, { new: true });
+        if (req.query.favourite == 'true') {
+            const showFavourite = await favouriteMaster.find({ user_id: user._id })
+            deferred.resolve(showFavourite);
+            return deferred.promise;
+        }
         if (req.query.password == 'true') {
             if (user.password != oldPassword) {
-                deferred.reject('check_old_password');
-                if (user.password == newPassword) {
-                    deferred.reject('check_password');
-                    if (newPassword != confirmPassword) {
-                        deferred.reject('Your confirm password is not equal to new password.');
-                    }
-                }
+                deferred.reject('check_old_password')
+                return deferred.promise;
+            } else if (user.password == newPassword) {
+                deferred.reject('Your new password is same as old password.Please use different new password')
+            }else if(newPassword!= confirmPassword){
+                deferred.reject('Your confirm password is not equal to new password.')
+                return deferred.promise;
             }
-            let updatePassword = await userMaster.findByIdAndUpdate(user._id, { password: confirmPassword }, { new: true });
+            let updatePassword = await userMaster.findByIdAndUpdate(user._id, { password: newPassword }, { new: true });
             deferred.resolve(updatePassword);
             return deferred.promise;
         }
         deferred.resolve(update);
     } catch (error) {
         console.log('userController.updateProfile-')
+    }
+    return deferred.promise;
+}
+
+userController.myCart = async(req,res)=>{
+    const deferred = Q.defer();
+    try {
+        const user = req.user;
+        const cartDetails = await cartMaster.find({user_id:user._id});
+        if(cartDetails==''){
+            deferred.reject('Cart is empty.');
+            return deferred.promise;
+        }
+        deferred.resolve(cartDetails);
+    } catch (error) {
+        console.log('userController.myCart-',error);
+        deferred.reject(error);
     }
     return deferred.promise;
 }

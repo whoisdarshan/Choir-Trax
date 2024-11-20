@@ -37,8 +37,8 @@
 const { MailtrapClient } = require('mailtrap');
 
 // Define the Mailtrap API token
-// const TOKEN = "8ffd2fed6b0c9906a6bbadfd181838b3";
-const TOKEN = "d27267faeefdc793e7e5ff7b695305da";
+const TOKEN = "8ffd2fed6b0c9906a6bbadfd181838b3";
+// const TOKEN = "d27267faeefdc793e7e5ff7b695305da";
 
 // Initialize the Mailtrap client
 const client = new MailtrapClient({ token: TOKEN });

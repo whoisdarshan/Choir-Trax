@@ -1,5 +1,4 @@
 const Joi = require('joi');
-const { artistList } = require('../controller/admin.controller');
 const emailSchema = Joi.string();
 const stringSchema = Joi.string();
 
@@ -71,7 +70,9 @@ module.exports={
                 songFile:stringSchema,
                 category:stringSchema.required(),
                 artist_id:Joi.objectId().required(),
-                type:stringSchema.required()
+                type:stringSchema.required(),
+                // playList_id:Joi.array().items(Joi.objectId()).optional()
+                playList_id: Joi.array().items(Joi.objectId()).single().optional()
             })
         },
         songListSchema:{
